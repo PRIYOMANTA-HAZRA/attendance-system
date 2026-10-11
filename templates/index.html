@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gradient-to-r from-blue-50 to-indigo-100 h-screen flex items-center justify-center">
+
+    <div class="bg-white p-10 rounded-2xl shadow-xl w-[400px]">
+        <div class="text-center mb-8">
+            <div class="bg-blue-600 text-white w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl shadow-lg">
+                <i class="fas fa-fingerprint"></i>
+            </div>
+            <h1 class="text-3xl font-extrabold text-gray-800">Attendance</h1>
+            <p class="text-gray-500 mt-2 text-sm">Welcome back! Please login.</p>
+        </div>
+        
+        <div id="login-section">
+            <div class="relative mb-6">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <i class="fas fa-id-badge text-gray-400"></i>
+                </div>
+                <input type="text" id="login-id" placeholder="Enter 6-Digit ID" class="w-full pl-10 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all" maxlength="6">
+            </div>
+            <button onclick="login()" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 shadow-md transition-all">Login</button>
+            <p class="mt-6 text-center text-sm text-gray-600">Don't have an ID? <a href="#" onclick="toggleSection()" class="text-blue-600 font-semibold hover:underline">Request Account</a></p>
+        </div>
+
+        <div id="register-section" class="hidden">
+            <p class="text-gray-500 mb-6 text-sm text-center">Submit a request to the Admin for your unique login ID.</p>
+            <div class="relative mb-6">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <i class="fas fa-user text-gray-400"></i>
+                </div>
+                <input type="text" id="register-name" placeholder="Full Name" class="w-full pl-10 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all">
+            </div>
+            <button onclick="register()" class="w-full bg-green-500 text-white font-bold py-3 rounded-lg hover:bg-green-600 shadow-md transition-all">Submit Request</button>
+            <p class="mt-6 text-center text-sm text-gray-600">Already requested? <a href="#" onclick="toggleSection()" class="text-blue-600 font-semibold hover:underline">Back to Login</a></p>
+        </div>
+        
+        <p id="message" class="mt-4 text-center font-medium"></p>
+    </div>
+
+    <script>
+        function toggleSection() {
+            document.getElementById('login-section').classList.toggle('hidden');
+            document.getElementById('register-section').classList.toggle('hidden');
+            document.getElementById('message').innerText = '';
+        }
+
+        function showMessage(msg, type='error') {
+            const el = document.getElementById('message');
+            el.innerText = msg;
+            el.className = `mt-4 text-center font-medium ${type === 'error' ? 'text-red-500' : 'text-green-500'}`;
+        }
+
+        async function register() {
+            const name = document.getElementById('register-name').value;
+            if(!name) return showMessage('Name is required');
+
+            try {
+                const res = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name})
+                });
+                const data = await res.json();
+                
+                if(data.error) {
+                    showMessage(data.error);
+                } else {
+                    showMessage(data.message, 'success');
+                    if(data.approved) {
+                        document.getElementById('login-id').value = data.user_id;
+                    }
+                    setTimeout(toggleSection, 3000);
+                }
+            } catch(e) {
+                showMessage('Server Error');
+            }
+        }
+
+        async function login() {
+            const userId = document.getElementById('login-id').value;
+            if(userId.length !== 6) return showMessage('Enter a valid 6-digit ID');
+
+            showMessage('Fetching location...', 'success');
+            
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    await doLogin(userId, position.coords.latitude, position.coords.longitude);
+                },
+                async (error) => {
+                    console.log("Location error", error);
+                    await doLogin(userId, null, null);
+                },
+                { timeout: 5000 }
+            );
+        }
+
+        async function doLogin(user_id, lat, lng) {
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({user_id, lat, lng})
+                });
+                const data = await res.json();
+                
+                if(data.error) {
+                    showMessage(data.error);
+                } else {
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    if(data.user.role === 'owner' || data.user.role === 'editor') {
+                        const wantAdmin = confirm("Do you want to enter the Admin Panel? Cancel for normal dashboard.");
+                        if(wantAdmin) window.location.href = '/admin';
+                        else window.location.href = '/dashboard';
+                    } else {
+                        window.location.href = '/dashboard';
+                    }
+                }
+            } catch(e) {
+                showMessage('Server Error');
+            }
+        }
+    </script>
+</body>
+</html>
