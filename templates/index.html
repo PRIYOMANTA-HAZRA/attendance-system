@@ -4,9 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Employee Attendance Portal</title>
-    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon.png">
-    <link rel="shortcut icon" href="/static/favicon.ico">
+    <!-- Favicon & Touch Icons -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2">
+    <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=2">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png?v=2">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png?v=2">
+    <link rel="icon" type="image/png" sizes="64x64" href="/static/favicon.png?v=2">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png?v=2">
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=2">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
@@ -219,21 +224,59 @@
             }
         }
 
+        function showLocationRequiredModal(customMsg = null) {
+            if (customMsg) {
+                document.getElementById('loc-modal-desc').innerText = customMsg;
+            } else {
+                document.getElementById('loc-modal-desc').innerText = 'অফিসে উপস্থিতি নিশ্চিত করতে ডিভাইসের GPS / Location অন রাখা বাধ্যতামূলক। আপনি লোকেশন বন্ধ রেখেছেন অথবা পারমিশন বাতিল করেছেন।';
+            }
+            const modal = document.getElementById('location-required-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeLocationRequiredModal() {
+            const modal = document.getElementById('location-required-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function retryLocation() {
+            closeLocationRequiredModal();
+            login();
+        }
+
         async function login() {
             const userId = document.getElementById('login-id').value.trim();
             if (userId.length !== 6) return showMessage('Please enter a valid 6-digit ID');
 
-            showMessage('Capturing location and authenticating...', true);
+            if (!navigator.geolocation) {
+                showLocationRequiredModal('আপনার ব্রাউজারে Geolocation সাপোর্ট নেই। অনুগ্রহ করে Chrome বা Safari ব্রাউজার ব্যবহার করুন।');
+                showMessage('লোকেশন (GPS) ছাড়া হাজিরা দেওয়া যাবে না।');
+                return;
+            }
+
+            showMessage('Locating position and authenticating...', true);
 
             navigator.geolocation.getCurrentPosition(
                 async (position) => {
+                    closeLocationRequiredModal();
                     await doLogin(userId, position.coords.latitude, position.coords.longitude);
                 },
-                async (error) => {
+                (error) => {
                     console.warn("Location error:", error);
-                    await doLogin(userId, null, null);
+                    let errText = 'হাজিরা দিতে হলে লোকেশন অন রাখতেই হবে। আপনি লোকেশন পারমিশন বন্ধ বা ক্যানসেল করেছেন।';
+                    if (error.code === error.PERMISSION_DENIED) {
+                        errText = 'লোকেশন পারমিশন বাতিল বা ব্লক করা হয়েছে। ব্রাউজারের অ্যাড্রেস বারে 🔒 আইকনে ট্যাপ করে Location: Allow করুন এবং ডিভাইসের GPS অন করুন।';
+                    } else if (error.code === error.POSITION_UNAVAILABLE) {
+                        errText = 'ডিভাইসের লোকেশন (GPS) পাওয়া যাচ্ছে না। দয়া করে ফোনের লোকেশন/GPS অন করুন।';
+                    } else if (error.code === error.TIMEOUT) {
+                        errText = 'লোকেশন পাওয়ার সময় শেষ হয়ে গেছে। অনুগ্রহ করে ফোনের GPS অন রেখে আবার চেষ্টা করুন।';
+                    }
+                    showMessage('লোকেশন (GPS) ছাড়া হাজিরা দেওয়া সম্ভব নয়। দয়া করে লোকেশন অন করুন।');
+                    showLocationRequiredModal(errText);
                 },
-                { enableHighAccuracy: true, timeout: 6000 }
+                { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
             );
         }
 
@@ -247,6 +290,9 @@
                 const data = await res.json();
                 if (data.error) {
                     showMessage(data.error);
+                    if (data.error.includes('লোকেশন') || data.error.includes('Location') || data.error.includes('Geofence')) {
+                        showLocationRequiredModal(data.error);
+                    }
                 } else {
                     localStorage.setItem('user', JSON.stringify(data.user));
                     if (data.user.role === 'owner' || data.user.role === 'editor') {
@@ -330,5 +376,37 @@
             }
         }
     </script>
+    <!-- Mandatory Location Required Modal -->
+    <div id="location-required-modal" class="fixed inset-0 bg-black/70 hidden items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in duration-200">
+        <div class="bg-white rounded-3xl p-6 md:p-8 max-w-sm w-full text-center shadow-2xl border border-gray-100 relative">
+            <div class="w-16 h-16 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4 text-3xl shadow-inner animate-bounce">
+                <i class="fas fa-map-marker-alt"></i>
+            </div>
+            
+            <h3 class="text-xl font-black text-gray-800 tracking-tight">লোকেশন অন করা বাধ্যতামূলক</h3>
+            <p class="text-[11px] font-bold text-rose-600 uppercase tracking-wider mt-1">Location (GPS) Required for Attendance</p>
+
+            <div class="bg-rose-50/80 rounded-2xl p-4 border border-rose-100 my-4 text-left space-y-2 text-xs text-gray-700">
+                <p class="font-bold text-rose-900 flex items-center">
+                    <i class="fas fa-exclamation-triangle text-rose-500 mr-2 text-sm"></i> লোকেশন ছাড়া হাজিরা গ্রহণ হবে না!
+                </p>
+                <p id="loc-modal-desc" class="text-gray-600 leading-relaxed">
+                    অফিসে উপস্থিতি নিশ্চিত করতে ডিভাইসের GPS / Location অন রাখা বাধ্যতামূলক। আপনি লোকেশন বন্ধ রেখেছেন অথবা পারমিশন বাতিল করেছেন।
+                </p>
+                <div class="pt-2 border-t border-rose-200/60 text-[11px] text-gray-600 space-y-1">
+                    <p class="font-bold text-gray-800">কীভাবে লোকেশন চালু করবেন:</p>
+                    <p>১. ফোনের উপর থেকে নোটিফিকেশন বার নামিয়ে <b>Location / GPS</b> আইকন অন করুন।</p>
+                    <p>২. ব্রাউজারের অ্যাড্রেস বারের বাম পাশে <b>তালা (🔒)</b> আইকনে ট্যাপ করে Location: <b>Allow</b> করুন।</p>
+                </div>
+            </div>
+
+            <button onclick="retryLocation()" class="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-rose-200 transition flex items-center justify-center text-sm cursor-pointer">
+                <i class="fas fa-sync-alt mr-2"></i> লোকেশন অন করেছি - আবার চেষ্টা করুন
+            </button>
+            <button onclick="closeLocationRequiredModal()" class="w-full mt-2.5 py-2 text-xs font-bold text-gray-500 hover:text-gray-800 transition cursor-pointer">
+                বন্ধ করুন (Cancel)
+            </button>
+        </div>
+    </div>
 </body>
 </html>
